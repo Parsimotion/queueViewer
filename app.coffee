@@ -1,6 +1,7 @@
 express = require 'express'
 bodyParser = require 'body-parser'
-azure = require 'azure-storage'
+Promise = require 'bluebird'
+azure = Promise.promisifyAll require('azure-storage')
 Q = require 'q'
 
 app = express()
@@ -13,19 +14,15 @@ app.use bodyParser()
 queueSvc = azure.createQueueService process.env['STORAGE_NAME'], process.env['STORAGE_SHARED_KEY']
 
 app.get '/', (req, res) ->
-  queueSvc.listQueuesSegmented null, (err, result, response) =>
-  	queueNames = result.entries.map (entrie) =>
-  	  entrie.name
+  queueSvc.listQueuesSegmentedAsync(null, null).then (result) =>
+    queueNames = result[0].entries.map (entrie) =>
+      entrie.name
     promises = queueNames.map (name) =>
-      class PromiseContext
-        constructor: (@name) ->
-        execute: =>
-          deferred =  Q.defer()
-          queueSvc.getQueueMetadata @name, null, (err, result, response) =>
-            deferred.reject(new Error(error)) if err
-            deferred.resolve "#{@name}: #{result.approximatemessagecount}, \t" if !err
-          deferred.promise
-      new PromiseContext(name).execute()
+      deff = Q.defer()
+      deff.resolve(name)
+      deff.promise.then (name) =>
+          queueSvc.getQueueMetadataAsync(name, null).then (result) =>
+            "#{name}: #{result[0].approximatemessagecount}, \t"
 
     Q.allSettled(promises).then (promisValues) ->
       resBody = ""

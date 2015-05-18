@@ -8,7 +8,7 @@ app = express()
 
 exports.app = app
 
-app.set 'port', process.env['WEB_PORT'] or 4000
+app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
 queueSvc = azure.createQueueService process.env['STORAGE_NAME'], process.env['STORAGE_SHARED_KEY']

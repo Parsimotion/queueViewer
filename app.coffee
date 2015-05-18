@@ -12,7 +12,7 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-serviceBusService = azure.createServiceBusService process.env['STORAGE_NAME']
+serviceBusService = azure.createServiceBusService process.env['SB_CONNECTION_STRING']
 queueSvc = azureStorage.createQueueService process.env['STORAGE_NAME'], process.env['STORAGE_SHARED_KEY']
 
 app.get '/', (req, res) ->

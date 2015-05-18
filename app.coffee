@@ -11,9 +11,10 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-queueSvc = azure.createQueueService process.env['STORAGE_NAME'], process.env['STORAGE_SHARED_KEY']
+queueSvc = azure.createQueueService 'mercadolibrequeue', '7x5+6He/11uSIbxXNFb+KL9L4dist1v13H717noOUIgbPRV3909ryxqTxn3kvOWma1a7/WFESW1RnJxeWjeZYA=='
 
 app.get '/', (req, res) ->
+  data = {}
   queueSvc.listQueuesSegmentedAsync(null, null).then (result) =>
     queueNames = result[0].entries.map (entrie) =>
       entrie.name
@@ -22,14 +23,11 @@ app.get '/', (req, res) ->
       deff.resolve(name)
       deff.promise.then (name) =>
           queueSvc.getQueueMetadataAsync(name, null).then (result) =>
-            "#{name}: #{result[0].approximatemessagecount}, \t"
+            data[name] = result[0].approximatemessagecount
 
     Q.allSettled(promises).then (promisValues) ->
-      resBody = ""
-      promisValues.forEach (value) ->
-        resBody += value.value
-    
-      res.send resBody
+      res.contentType 'application/json'
+      res.send(JSON.stringify(data))
 
 app.listen app.get('port'), () ->
   console.log "listening on port #{app.get('port')}"

@@ -13,9 +13,8 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-sn = process.env['STORAGE_NAME']
-ssk = process.env['STORAGE_SHARED_KEY']
 sbcs = process.env['SB_CONNECTION_STRING']
+ascs = JSON.parse process.env['STORAGE_CREDENTIALS']
 
 
 class ResolvedPromise
@@ -29,6 +28,11 @@ class StorageQueueService
   constructor: (@storageName, @storageSharedKey) ->
     @queueSvc = azureStorage.createQueueService @storageName, @storageSharedKey
 
+  getPluckedDataWithName: =>
+    @getPluckedData().then (queuesResults) =>
+      obj = {}
+      obj[@storageName] = queuesResults
+      obj
   getPluckedData: =>
     @getData().then (queuesResults) ->
       _.object(_.pluck(queuesResults, 'name'), _.pluck(queuesResults, 'quantity'))
@@ -78,14 +82,16 @@ app.get '/', (req, res) ->
 
   serviceBusQuery = new ServiceBusService(sbcs).getData()
   .then (result) ->
-    azureStorage: result
+    serviceBus: result
 
     
   promises.push serviceBusQuery
   
-  azureStorageQuery = new StorageQueueService(sn, ssk).getPluckedData()
-  .then (result) ->
-    serviceBus: result
+  azureStorageQueries = ascs.map (credential) ->
+    query = new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
+
+  azureStorageQuery = Q.all(azureStorageQueries).then (results) ->
+    azureStorage: results
 
   promises.push azureStorageQuery
 

@@ -66,13 +66,6 @@ class ServiceBusService
             Status: sbQueueData.Status
         _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
 
-app.get '/azureStorage', (req, res) ->
-  service = new StorageQueueService(sn, ssk)
-  service.getData().then (queueData) ->
-      res.contentType 'application/json'
-      res.send(JSON.stringify(queueData))
-
-
 app.get '/', (req, res) ->
   debugger
   promises = []

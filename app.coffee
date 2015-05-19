@@ -67,12 +67,6 @@ class ServiceBusService
         _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
 
 app.get '/', (req, res) ->
-  debugger
-  promises = []
-  data =
-    serviceBus: {}
-    azureStorage: {}
-
   serviceBusQuery = new ServiceBusService(sbcs).getData()
   .then (result) ->
     serviceBus: result

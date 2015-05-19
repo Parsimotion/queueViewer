@@ -4,6 +4,7 @@ Promise = require 'bluebird'
 azure = Promise.promisifyAll require('azure')
 azureStorage = Promise.promisifyAll require('azure-storage')
 Q = require 'q'
+_ = require 'lodash'
 
 app = express()
 
@@ -12,8 +13,61 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-serviceBusService = azure.createServiceBusService process.env['SB_CONNECTION_STRING']
-queueSvc = azureStorage.createQueueService process.env['STORAGE_NAME'], process.env['STORAGE_SHARED_KEY']
+sn = process.env['STORAGE_NAME']
+ssk = process.env['STORAGE_SHARED_KEY']
+sbcs = process.env['SB_CONNECTION_STRING']
+
+
+class ResolvedPromise
+  constructor: (value) ->
+    @deferred = Q.defer()
+    @deferred.resolve(value)
+  promise: =>
+    @deferred.promise
+
+class StorageQueueService
+  constructor: (@storageName, @storageSharedKey) ->
+    @queueSvc = azureStorage.createQueueService @storageName, @storageSharedKey
+
+  getPluckedData: =>
+    @getData().then (queuesResults) ->
+      _.object(_.pluck(queuesResults, 'name'), _.pluck(queuesResults, 'quantity'))
+  getData: =>
+    @_getQueueNames().then (queuesResults) =>
+      fromNameQueries = queuesResults
+      .map((result) => result.name)
+      .map (name) =>
+        new ResolvedPromise(name).promise().then (name) =>
+            @queueSvc.getQueueMetadataAsync(name, null).then (result) =>
+              name: name
+              quantity: result[0].approximatemessagecount
+      Q.all fromNameQueries
+
+  _getQueueNames: =>
+    @queueSvc.listQueuesSegmentedAsync(null, null).then (result) ->
+      result[0].entries
+
+class ServiceBusService
+  constructor: (connectionString) ->
+    @serviceBusService = azure.createServiceBusService connectionString
+
+  getData: =>
+    @serviceBusService.listQueuesAsync().then (result) ->
+        queuesInformation = result[0]
+        queuesInformation = queuesInformation.map (sbQueueData) ->
+          name: sbQueueData.QueueName
+          data:
+            ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
+            DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
+            Status: sbQueueData.Status
+        _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
+
+app.get '/azureStorage', (req, res) ->
+  service = new StorageQueueService(sn, ssk)
+  service.getData().then (queueData) ->
+      res.contentType 'application/json'
+      res.send(JSON.stringify(queueData))
+
 
 app.get '/', (req, res) ->
   debugger
@@ -21,30 +75,23 @@ app.get '/', (req, res) ->
   data =
     serviceBus: {}
     azureStorage: {}
-  serviceBusQuery = serviceBusService.listQueuesAsync().then (result) ->
-    queuesInformation = result[0]
-    queuesInformation.forEach (sbQueueData) ->
-      data.serviceBus[sbQueueData.QueueName] = 
-        ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
-        DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
-        Status: sbQueueData.Status
-  
+
+  serviceBusQuery = new ServiceBusService(sbcs).getData()
+  .then (result) ->
+    azureStorage: result
+
+    
   promises.push serviceBusQuery
   
-  azureStorageQuery = queueSvc.listQueuesSegmentedAsync(null, null).then (result) ->
-    queueNames = result[0].entries.map (entrie) ->
-      entrie.name
-    fromNameQueries = queueNames.map (name) ->
-      deff = Q.defer()
-      deff.resolve(name)
-      deff.promise.then (name) =>
-          queueSvc.getQueueMetadataAsync(name, null).then (result) ->
-            data.azureStorage[name] = result[0].approximatemessagecount
-    promises = promises.concat fromNameQueries
+  azureStorageQuery = new StorageQueueService(sn, ssk).getPluckedData()
+  .then (result) ->
+    serviceBus: result
 
-    Q.allSettled(promises).then (promisValues) ->
-      res.contentType 'application/json'
-      res.send(JSON.stringify(data))
+  promises.push azureStorageQuery
+
+  Q.all(promises).then (data) ->
+    res.contentType 'application/json'
+    res.send(JSON.stringify(data))
 
 app.listen app.get('port'), () ->
   console.log "listening on port #{app.get('port')}"

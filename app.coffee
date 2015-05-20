@@ -67,6 +67,8 @@ class ServiceBusService
         _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
 
 app.get '/', (req, res) ->
+  promises = []
+  
   serviceBusQuery = new ServiceBusService(sbcs).getData()
   .then (result) ->
     serviceBus: result

@@ -6,6 +6,9 @@ azureStorage = Promise.promisifyAll require('azure-storage')
 Q = require 'q'
 _ = require 'lodash'
 
+parse = (it) ->
+  JSON['parse'] it
+
 app = express()
 
 exports.app = app
@@ -14,7 +17,7 @@ app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
 sbcs = process.env['SB_CONNECTION_STRING']
-ascs = JSON.parse process.env['STORAGE_CREDENTIALS']
+credentials = process.env['STORAGE_CREDENTIALS']
 
 
 class ResolvedPromise
@@ -68,7 +71,7 @@ class ServiceBusService
 
 app.get '/', (req, res) ->
   promises = []
-  
+
   serviceBusQuery = new ServiceBusService(sbcs).getData()
   .then (result) ->
     serviceBus: result
@@ -87,6 +90,34 @@ app.get '/', (req, res) ->
   Q.all(promises).then (data) ->
     res.contentType 'application/json'
     res.send(JSON.stringify(data))
+
+  service = azure.createTableService process.env['TABLE_AZURE_STORAGE_NAME'], process.env['TABLE_AZURE_STORAGE_SHARED_KEY']
+  tableName = 'ConflictStatus'
+  query = new azure.TableQuery()
+  .select()
+  .where('PartitionKey eq ?', 'validation_error')
+
+  service.queryEntitiesAsync(tableName, query, null)
+  .then (results) ->
+    console.log results
+    results[0].entries
+  .then (entries) ->
+    entries.map (e) ->
+      content = parse e.Content._
+
+      productecaResource: e.ResourceFromMessage._
+      meliResource:
+        uri: content.RequestInformation.URI
+        method: content.RequestInformation.HttpMethod
+        body: parse _.findWhere(content.RequestInformation.Parameters, Type: 'RequestBody').Value
+        errorMessage: content.RequestError.Message
+      user:
+        type: e.AuthenticationType._
+        id: e.User._
+      time: e.Timestamp._
+  .then (results) ->
+    res.contentType 'application/json'
+    res.send(JSON.stringify(results))
 
 app.listen app.get('port'), () ->
   console.log "listening on port #{app.get('port')}"

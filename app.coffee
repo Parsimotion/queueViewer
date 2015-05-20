@@ -19,6 +19,7 @@ app.use bodyParser()
 sbcs = process.env['SB_CONNECTION_STRING']
 credentials = process.env['STORAGE_CREDENTIALS']
 credentials = JSON.parse credentias
+credentials = JSON.parse credentials
 
 
 class ResolvedPromise

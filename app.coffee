@@ -18,6 +18,7 @@ app.use bodyParser()
 
 sbcs = process.env['SB_CONNECTION_STRING']
 credentials = process.env['STORAGE_CREDENTIALS']
+credentials = JSON.parse credentias
 
 
 class ResolvedPromise
@@ -76,10 +77,9 @@ app.get '/', (req, res) ->
   .then (result) ->
     serviceBus: result
 
-    
   promises.push serviceBusQuery
   
-  azureStorageQueries = ascs.map (credential) ->
+  azureStorageQueries = credentials.map (credential) ->
     query = new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
 
   azureStorageQuery = Q.all(azureStorageQueries).then (results) ->
@@ -91,6 +91,7 @@ app.get '/', (req, res) ->
     res.contentType 'application/json'
     res.send(JSON.stringify(data))
 
+app.get '/meli/errors/validation_error', (req, res) ->
   service = azure.createTableService process.env['TABLE_AZURE_STORAGE_NAME'], process.env['TABLE_AZURE_STORAGE_SHARED_KEY']
   tableName = 'ConflictStatus'
   query = new azure.TableQuery()

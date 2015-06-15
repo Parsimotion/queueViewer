@@ -16,8 +16,8 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-sbcs = process.env['SB_CONNECTION_STRING']
-credentials = process.env['STORAGE_CREDENTIALS']
+sbcs = "Endpoint=sb://producteca-development.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=+eDnRse452INPPOIM8RRp31+B6KO88oKATeSnlUtrn0="
+credentials = '[{"name":"mercadolibredevelopment","shared":"y8s2T022idFylavic/0oYTGS0oZK01feP1b9kOlNfL2kWJjE4W8J7yYoxENQMtluOFAIp0AYcSrb7HUhMI4d0g=="},{"name":"melinotificationsdev","shared":"tcF9zpQliX4M6NkqIfts5Vr2DsaWzwhFinBtLGiLkyFrjjukE2Am5CluJq25KE8f2HzMmloTdh/suDvSqdMviQ=="}]'
 credentials = JSON.parse credentials
 
 
@@ -60,15 +60,19 @@ class ServiceBusService
     @serviceBusService = azure.createServiceBusService connectionString
 
   getData: =>
-    @serviceBusService.listQueuesAsync().then (result) ->
-        queuesInformation = result[0]
-        queuesInformation = queuesInformation.map (sbQueueData) ->
-          name: sbQueueData.QueueName
-          data:
-            ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
-            DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
-            Status: sbQueueData.Status
-        _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
+    @serviceBusService.listTopicsAsync().then (result) =>
+      topics = result[0]
+      Q.all topics.map (topic) =>
+        @serviceBusService.listSubscriptionsAsync(topic.TopicName).then (result) =>
+            queuesInformation = result[0]
+            queuesInformation = queuesInformation.map (sbQueueData) =>
+              name: sbQueueData.SubscriptionName
+              data:
+                ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
+                DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
+                Status: sbQueueData.Status
+                Topic: topic.TopicName
+            _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
 
 app.get '/', (req, res) ->
   promises = []

@@ -18,7 +18,7 @@ app.use bodyParser()
 
 sbcs = process.env['SB_CONNECTION_STRING']
 credentials = process.env['STORAGE_CREDENTIALS']
-credentials = JSON.parse credentials
+credentials = JSON.parse credentials if credentials
 
 
 class ResolvedPromise
@@ -77,19 +77,21 @@ class ServiceBusService
 app.get '/', (req, res) ->
   promises = []
 
-  serviceBusQuery = new ServiceBusService(sbcs).getData()
-  .then (result) ->
-    serviceBus: result
-
-  promises.push serviceBusQuery
+  if sbcs
+    serviceBusQuery = new ServiceBusService(sbcs).getData()
+    .then (result) ->
+      serviceBus: result
   
-  azureStorageQueries = credentials.map (credential) ->
-    query = new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
-
-  azureStorageQuery = Q.all(azureStorageQueries).then (results) ->
-    azureStorage: results
-
-  promises.push azureStorageQuery
+    promises.push serviceBusQuery
+  
+  if credentials
+    azureStorageQueries = credentials.map (credential) ->
+      query = new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
+  
+    azureStorageQuery = Q.all(azureStorageQueries).then (results) ->
+      azureStorage: results
+  
+    promises.push azureStorageQuery
 
   Q.all(promises).then (data) ->
     res.contentType 'application/json'

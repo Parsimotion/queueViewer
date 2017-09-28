@@ -78,11 +78,12 @@ app.get '/', (req, res) ->
   promises = []
 
   if sbcs
-    serviceBusQuery = new ServiceBusService(sbcs).getData()
-    .then (result) ->
-      serviceBus: result
-  
-    promises.push serviceBusQuery
+    sbcs.split(',').forEach (connection) ->
+      name = connection.match(/Endpoint=sb:\/\/(.+)\.servicebus\.windows\.net/)[1]
+      serviceBusQuery = new ServiceBusService(connection).getData()
+      .then (result) -> { "#{name}-servicebus": result }
+
+      promises.push serviceBusQuery
   
   if credentials
     azureStorageQueries = credentials.map (credential) ->

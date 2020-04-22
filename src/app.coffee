@@ -3,20 +3,7 @@ bodyParser = require 'body-parser'
 Promise = require 'bluebird'
 StorageQueueService = require("./domain/storage.queue.service")
 ServiceBusService = require("./domain/servicebus.service")
-
-winston = require("winston")
-{ format } = winston
-
-logger = winston.createLogger {
-  level: 'debug',
-  format: format.combine(
-    format.splat(),
-    format.simple()
-  )
-  transports: [
-    new winston.transports.Console {}
-  ]
-}
+logger = require("./domain/logger") "app"
 
 sbcs = process.env['SB_CONNECTION_STRING']
 credentials = process.env['STORAGE_CREDENTIALS']

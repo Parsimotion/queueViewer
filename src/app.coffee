@@ -8,7 +8,7 @@ winston = require("winston")
 { format } = winston
 
 logger = winston.createLogger {
-  level: 'silly',
+  level: 'debug',
   format: format.combine(
     format.splat(),
     format.simple()
@@ -90,7 +90,7 @@ app.get '/', (req, res) ->
       serviceBusQuery = 
         new ServiceBusService(connection).getData()
         .then (result) -> { "#{name}-servicebus": result }
-        .tap (result) -> logger.debug "Status services=%j", result
+        .tap (result) -> logger.silly "Status services=%j", result
 
       promises.push serviceBusQuery
   

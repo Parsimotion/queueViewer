@@ -14,7 +14,7 @@
     "winston": "^3.2.1"
   },
   "scripts": {
-    "start": "node server.js",
-    "debug": "node server.js"
+    "start": "node src/server.js",
+    "debug": "node src/server.js"
   }
 }

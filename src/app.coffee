@@ -11,6 +11,7 @@ app.set 'port', process.env.PORT or 9000
 app.use bodyParser()
 
 app.get '/', require("./api")
+app.get '/healthz', (req, res) -> res.status(200).end()
 
 app.listen app.get('port'), () ->
   logger.info "listening on port #{app.get('port')}"

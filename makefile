@@ -1,4 +1,4 @@
-APP=qviewer
+APP=queueviewer
 REGISTRY_PREFIX=producteca-jobs
 BUILD_FOLDER=.
 LAST_COMMIT= $(shell git rev-parse HEAD)

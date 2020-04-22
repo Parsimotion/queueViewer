@@ -3,11 +3,29 @@ bodyParser = require 'body-parser'
 Promise = require 'bluebird'
 azure = Promise.promisifyAll require('azure')
 azureStorage = Promise.promisifyAll require('azure-storage')
-Q = require 'q'
-_ = require 'lodash'
 
-parse = (it) ->
-  JSON['parse'] it
+winston = require("winston")
+{ format } = winston
+
+logger = winston.createLogger {
+  level: 'silly',
+  format: format.combine(
+    format.splat(),
+    format.simple()
+  )
+  transports: [
+    new winston.transports.Console {}
+  ]
+}
+
+sbcs = process.env['SB_CONNECTION_STRING']
+credentials = process.env['STORAGE_CREDENTIALS']
+logger.silly "Credentials Servicebus %s", sbcs
+logger.silly "Credentials Azure storage %s", credentials
+
+credentials = JSON.parse credentials if credentials
+
+parse = (it) -> JSON['parse'] it
 
 app = express()
 
@@ -16,17 +34,6 @@ exports.app = app
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
-sbcs = process.env['SB_CONNECTION_STRING']
-credentials = process.env['STORAGE_CREDENTIALS']
-credentials = JSON.parse credentials if credentials
-
-
-class ResolvedPromise
-  constructor: (value) ->
-    @deferred = Q.defer()
-    @deferred.resolve(value)
-  promise: =>
-    @deferred.promise
 
 class StorageQueueService
   constructor: (@storageName, @storageSharedKey) ->
@@ -34,23 +41,21 @@ class StorageQueueService
 
   getPluckedDataWithName: =>
     @getPluckedData().then (queuesResults) =>
-      obj = {}
-      obj[@storageName] = queuesResults
-      obj
+      _.zipObject [@storageName], [queuesResults]
+  
   getPluckedData: =>
     @getData().then (queuesResults) ->
-      _.object(_.pluck(queuesResults, 'name'), _.pluck(queuesResults, 'quantity'))
+      _.zipObject(_.map(queuesResults, 'name'), _.map(queuesResults, 'quantity'))
+  
   getData: =>
-    @_getQueueNames().then (queuesResults) =>
-      fromNameQueries = queuesResults
-      .map((result) => result.name)
-      .map (name) =>
-        new ResolvedPromise(name).promise().then (name) =>
-            @queueSvc.getQueueMetadataAsync(name, null).then (result) =>
-              name: name
-              quantity: result[0].approximatemessagecount
-      Q.all fromNameQueries
-
+    @_getQueueNames()
+    .map (result) => result.name
+    .map (name) =>
+      Promise.resolve(name)
+      .then (name) => @queueSvc.getQueueMetadataAsync(name, null)
+      .then (result) =>
+        { name, quantity: result[0].approximatemessagecount }
+    
   _getQueueNames: =>
     @queueSvc.listQueuesSegmentedAsync(null, null).then (result) ->
       result[0].entries
@@ -60,19 +65,20 @@ class ServiceBusService
     @serviceBusService = azure.createServiceBusService connectionString
 
   getData: =>
-    @serviceBusService.listTopicsAsync().then (result) =>
-      topics = result[0]
-      Q.all topics.map (topic) =>
-        @serviceBusService.listSubscriptionsAsync(topic.TopicName).then (result) =>
-          queuesInformation = result[0]
-          queuesInformation = queuesInformation.map (sbQueueData) =>
+    @serviceBusService.listTopicsAsync()
+    .get 0
+    .then (topics) =>
+      Promise.map topics, (topic) =>
+        @serviceBusService.listSubscriptionsAsync(topic.TopicName)
+        .then (result) =>
+          queuesInformation = result[0].map (sbQueueData) =>
             name: sbQueueData.SubscriptionName
             data:
               ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
               DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
               Status: sbQueueData.Status
               Topic: topic.TopicName
-          _.object(_.pluck(queuesInformation, 'name'), _.pluck(queuesInformation, 'data'))
+          _.zipObject(_.map(queuesInformation, 'name'), _.map(queuesInformation, 'data'))
 
 app.get '/', (req, res) ->
   promises = []
@@ -80,52 +86,24 @@ app.get '/', (req, res) ->
   if sbcs
     sbcs.split(',').forEach (connection) ->
       name = connection.match(/Endpoint=sb:\/\/(.+)\.servicebus\.windows\.net/)[1]
-      serviceBusQuery = new ServiceBusService(connection).getData()
-      .then (result) -> { "#{name}-servicebus": result }
+      logger.debug("Retrieve sb from %s", name)
+      serviceBusQuery = 
+        new ServiceBusService(connection).getData()
+        .then (result) -> { "#{name}-servicebus": result }
+        .tap (result) -> logger.debug "Status services=%j", result
 
       promises.push serviceBusQuery
   
   if credentials
-    azureStorageQueries = credentials.map (credential) ->
-      query = new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
-  
-    azureStorageQuery = Q.all(azureStorageQueries).then (results) ->
-      azureStorage: results
+    azureStorageQuery = 
+      Promise.map credentials, (credential) -> new StorageQueueService(credential.name, credential.shared).getPluckedDataWithName()
+      .then (results) -> { azureStorage: results }
   
     promises.push azureStorageQuery
 
-  Q.all(promises).then (data) ->
+  Promise.all(promises).then (data) ->
     res.contentType 'application/json'
     res.send(JSON.stringify(data))
-
-app.get '/meli/errors/validation_error', (req, res) ->
-  service = azure.createTableService process.env['TABLE_AZURE_STORAGE_NAME'], process.env['TABLE_AZURE_STORAGE_SHARED_KEY']
-  tableName = 'ConflictStatus'
-  query = new azure.TableQuery()
-  .select()
-  .where('PartitionKey eq ?', 'validation_error')
-
-  service.queryEntitiesAsync(tableName, query, null)
-  .then (results) ->
-    console.log results
-    results[0].entries
-  .then (entries) ->
-    entries.map (e) ->
-      content = parse e.Content._
-
-      productecaResource: e.ResourceFromMessage._
-      meliResource:
-        uri: content.RequestInformation.URI
-        method: content.RequestInformation.HttpMethod
-        body: parse _.findWhere(content.RequestInformation.Parameters, Type: 'RequestBody').Value
-        errorMessage: content.RequestError.Message
-      user:
-        type: e.AuthenticationType._
-        id: e.User._
-      time: e.Timestamp._
-  .then (results) ->
-    res.contentType 'application/json'
-    res.send(JSON.stringify(results))
 
 app.listen app.get('port'), () ->
   console.log "listening on port #{app.get('port')}"

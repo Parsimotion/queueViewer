@@ -1,8 +1,8 @@
 express = require 'express'
 bodyParser = require 'body-parser'
 Promise = require 'bluebird'
-azure = Promise.promisifyAll require('azure')
 StorageQueueService = require("./domain/storage.queue.service")
+ServiceBusService = require("./domain/servicebus.service")
 
 winston = require("winston")
 { format } = winston
@@ -33,29 +33,6 @@ exports.app = app
 
 app.set 'port', process.env.port or 4000
 app.use bodyParser()
-
-
-
-
-class ServiceBusService
-  constructor: (connectionString) ->
-    @serviceBusService = azure.createServiceBusService connectionString
-
-  getData: =>
-    @serviceBusService.listTopicsAsync()
-    .get 0
-    .then (topics) =>
-      Promise.map topics, (topic) =>
-        @serviceBusService.listSubscriptionsAsync(topic.TopicName)
-        .then (result) =>
-          queuesInformation = result[0].map (sbQueueData) =>
-            name: sbQueueData.SubscriptionName
-            data:
-              ActiveMessageCount: sbQueueData.CountDetails['d2p1:ActiveMessageCount']
-              DeadLetterMessageCount: sbQueueData.CountDetails['d2p1:DeadLetterMessageCount']
-              Status: sbQueueData.Status
-              Topic: topic.TopicName
-          _.zipObject(_.map(queuesInformation, 'name'), _.map(queuesInformation, 'data'))
 
 app.get '/', (req, res) ->
   promises = []

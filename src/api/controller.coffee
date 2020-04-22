@@ -26,4 +26,5 @@ module.exports =
                 .then (results) -> { azureStorage: results }
             )
 
-        Promise.all _.flatten promises
+        Promise.all promises
+        .then _.flattenDeep

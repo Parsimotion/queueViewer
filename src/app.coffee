@@ -2,7 +2,7 @@ express = require 'express'
 bodyParser = require 'body-parser'
 Promise = require 'bluebird'
 azure = Promise.promisifyAll require('azure')
-azureStorage = Promise.promisifyAll require('azure-storage')
+StorageQueueService = require("./domain/storage.queue.service")
 
 winston = require("winston")
 { format } = winston
@@ -35,30 +35,7 @@ app.set 'port', process.env.port or 4000
 app.use bodyParser()
 
 
-class StorageQueueService
-  constructor: (@storageName, @storageSharedKey) ->
-    @queueSvc = azureStorage.createQueueService @storageName, @storageSharedKey
 
-  getPluckedDataWithName: =>
-    @getPluckedData().then (queuesResults) =>
-      _.zipObject [@storageName], [queuesResults]
-  
-  getPluckedData: =>
-    @getData().then (queuesResults) ->
-      _.zipObject(_.map(queuesResults, 'name'), _.map(queuesResults, 'quantity'))
-  
-  getData: =>
-    @_getQueueNames()
-    .map (result) => result.name
-    .map (name) =>
-      Promise.resolve(name)
-      .then (name) => @queueSvc.getQueueMetadataAsync(name, null)
-      .then (result) =>
-        { name, quantity: result[0].approximatemessagecount }
-    
-  _getQueueNames: =>
-    @queueSvc.listQueuesSegmentedAsync(null, null).then (result) ->
-      result[0].entries
 
 class ServiceBusService
   constructor: (connectionString) ->

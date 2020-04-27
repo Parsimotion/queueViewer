@@ -1,2 +1,4 @@
 node_modules
 *.log
+local.env.js
+site.config

@@ -6,8 +6,6 @@ StorageQueueService = require("../domain/storage.queue.service")
 ServiceBusService = require("../domain/servicebus.service")
 
 CURRENT_OPERATION = null
-_refreshCurrentOperation = () -> CURRENT_OPERATION = parseInt(Math.random() * 9999999999)
-_refreshCurrentOperation()
 
 _queues = _.memoize (currentOperation) ->
     promises = []
@@ -32,6 +30,11 @@ _queues = _.memoize (currentOperation) ->
     .then _.flattenDeep
     .tap _refreshCurrentOperation
 
+_refreshCurrentOperation = () -> 
+    CURRENT_OPERATION = parseInt(Math.random() * 9999999999)
+    _queues.cache.clear()
+
+_refreshCurrentOperation()
 
 module.exports =
     index: -> _queues CURRENT_OPERATION

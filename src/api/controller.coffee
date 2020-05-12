@@ -28,7 +28,7 @@ _queues = _.memoize (currentOperation) ->
 
     Promise.all promises
     .then _.flattenDeep
-    .tap _refreshCurrentOperation
+    .finally _refreshCurrentOperation
 
 _refreshCurrentOperation = () -> 
     CURRENT_OPERATION = parseInt(Math.random() * 9999999999)

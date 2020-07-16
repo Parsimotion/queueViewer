@@ -29,7 +29,7 @@ _queues = _.memoize (currentOperation) ->
     if sqsCredentials
         promises.push(
             new SQSQueueService(sqsCredentials).getData()
-            .then (results) -> [{ aws: results }]
+            .then (results) -> [{ aws: [results] }]
         )
 
     Promise.all promises

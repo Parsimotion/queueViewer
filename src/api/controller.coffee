@@ -1,7 +1,8 @@
 Promise = require("bluebird")
-{ serviceBusConnectionsStrings, azureStorageCredentials } = require("../config/environment")
+{ serviceBusConnectionsStrings, azureStorageCredentials, sqsCredentials } = require("../config/environment")
 logger = require("../domain/logger") "controller"
 
+SQSQueueService = require("../domain/sqs.queue.service")
 StorageQueueService = require("../domain/storage.queue.service")
 ServiceBusService = require("../domain/servicebus.service")
 
@@ -24,6 +25,11 @@ _queues = _.memoize (currentOperation) ->
             Promise.map azureStorageCredentials, (credential) -> new StorageQueueService(credential.name, credential.shared)
             .map (service) -> service.getPluckedDataWithName()
             .then (results) -> { azureStorage: results }
+        )
+    if sqsCredentials
+        promises.push(
+            new SQSQueueService(sqsCredentials)._getQueueNames()
+            .then (results) -> { aws: results }
         )
 
     Promise.all promises

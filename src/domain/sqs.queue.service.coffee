@@ -1,9 +1,10 @@
+_ = require 'lodash'
+AWS = require 'aws-sdk'
 Promise = require 'bluebird'
-AWS = require('aws-sdk')
 
 module.exports = 
 class SQSQueueService
-   constructor: ({ access, secret, region = "us-east-1" }) ->
+  constructor: ({ access, secret, region = "us-east-1" }) ->
     @client = new AWS.SQS { 
       apiVersion: '2012-11-05',
       accessKeyId: access,
@@ -30,8 +31,20 @@ class SQSQueueService
         { name, quantity: result[0].approximatemessagecount }
     
   _getQueueNames: =>
-    @_promisify(@client.listQueues)().then (result) ->
+    @_promisify(@client.listQueues)()
+    .get "QueueUrls"
+    .map (queueUrl) => Promise.props {
+      name: _(queueUrl).split("/").last(),
+      count:  @_queueCount(queueUrl)
+    }
+    .then (result) =>
       console.log "aaaa",result
 #      result[0].entries
+  _queueCount: (QueueUrl) =>
+    countKey = "ApproximateNumberOfMessages"
+    @_promisify(@client.getQueueAttributes)({
+      QueueUrl,
+      AttributeNames: [countKey]
+    }).get("Attributes").get(countKey)
 
   _promisify: (fn) => Promise.promisify(fn).bind(@client)

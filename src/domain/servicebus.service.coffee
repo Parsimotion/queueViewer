@@ -12,10 +12,8 @@ class ServiceBusService
     .get 0
     .then (topics) =>
       Promise.map topics, (topic) =>
-        Promise.all([
-          @serviceBusService.listSubscriptionsAsync(topic.TopicName, { skip: 0, top: PAGE_SIZE }),
-          @serviceBusService.listSubscriptionsAsync(topic.TopicName, { skip: PAGE_SIZE, top: PAGE_SIZE })
-        ])
+        $pages = _.times 2, (i) => @serviceBusService.listSubscriptionsAsync(topic.TopicName, { skip: PAGE_SIZE * i, top: PAGE_SIZE })
+        Promise.all($pages)
         .spread ([page1], [page2]) => page1.concat page2
         .then (result) =>
           queuesInformation = result.map (sbQueueData) =>
